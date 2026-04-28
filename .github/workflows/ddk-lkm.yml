@@ -46,7 +46,6 @@ jobs:
           make -C /opt/ddk/kdir/$KMI \
             M=/opt/ddk/src/$KMI/drivers/android \
             CONFIG_REKERNEL=m \
-            CONFIG_DEBUG_INFO_BTF=n \
             CC="clang" \
             modules
           

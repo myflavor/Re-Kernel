@@ -19,7 +19,7 @@ jobs:
           - kmi: android15-6.6
             ddk_release: '20260313'
           - kmi: android16-6.12
-            ddk_release: '20250825'
+            ddk_release: '20251104'
           - kmi: android16-6.12
             ddk_release: '20260313'
     uses: ./.github/workflows/ddk-lkm.yml
