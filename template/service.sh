@@ -1,14 +1,9 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
 
-if [ -f "$MODDIR"/.boot ]; then
-    rm "$MODDIR"/.boot
-    exit 0
+if [ -f "$MODDIR"/disable ]; then
+    return
 fi
-
-touch "$MODDIR"/.boot
-sync
-sleep 1
 
 for mod in "$MODDIR"/rekernel-*.ko; do
     if [ -f "$mod" ]; then
