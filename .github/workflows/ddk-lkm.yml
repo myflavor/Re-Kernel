@@ -15,10 +15,10 @@ on:
 
 jobs:
   build-rekernel-ko:
-    name: Build rekernel.ko for ${{ inputs.kmi }}
+    name: Build rekernel.ko for ${{ inputs.kmi }}-${{ inputs.ddk_release }}
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/ylarod/ddk-min:${{ inputs.kmi }}-${{ inputs.ddk_release }}
+      image: ghcr.io/ylarod/ddk:${{ inputs.kmi }}-${{ inputs.ddk_release }}
       options: --privileged
 
     steps:
@@ -27,7 +27,6 @@ jobs:
 
       - name: Build rekernel.ko
         run: |
-          git config --global --add safe.directory /__w/Re-Kernel/Re-Kernel
           
           KMI=${{ inputs.kmi }}
           
@@ -47,6 +46,7 @@ jobs:
           make -C /opt/ddk/kdir/$KMI \
             M=/opt/ddk/src/$KMI/drivers/android \
             CONFIG_REKERNEL=m \
+            CONFIG_DEBUG_INFO_BTF=n \
             CC="clang" \
             modules
           
@@ -54,7 +54,7 @@ jobs:
           
           # Create output directory and copy artifact
           mkdir -p /github/workspace/out
-          OUTPUT_NAME="${KMI}_rekernel.ko"
+          OUTPUT_NAME="rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko"
           cp /opt/ddk/src/$KMI/drivers/android/rekernel.ko "/github/workspace/out/$OUTPUT_NAME"
           
           echo "Copied to: /github/workspace/out/$OUTPUT_NAME"
@@ -66,5 +66,5 @@ jobs:
       - name: Upload rekernel.ko artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ inputs.kmi }}_rekernel.ko
-          path: /github/workspace/out/${{ inputs.kmi }}_rekernel.ko
+          name: rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko
+          path: /github/workspace/out/rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko
