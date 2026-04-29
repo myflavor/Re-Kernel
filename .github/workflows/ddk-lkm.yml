@@ -7,18 +7,13 @@ on:
         description: 'KMI version'
         required: true
         type: string
-      ddk_release:
-        description: 'DDK release version'
-        required: false
-        default: '20260313'
-        type: string
 
 jobs:
   build-rekernel-ko:
-    name: Build rekernel.ko for ${{ inputs.kmi }}-${{ inputs.ddk_release }}
+    name: Build rekernel.ko for ${{ inputs.kmi }}
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/ylarod/ddk:${{ inputs.kmi }}-${{ inputs.ddk_release }}
+      image: ghcr.io/myflavor/ddk/ddk-min:${{ inputs.kmi }}
       options: --privileged
 
     steps:
@@ -53,7 +48,7 @@ jobs:
           
           # Create output directory and copy artifact
           mkdir -p /github/workspace/out
-          OUTPUT_NAME="rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko"
+          OUTPUT_NAME="rekernel-${{ inputs.kmi }}.ko"
           cp /opt/ddk/src/$KMI/drivers/android/rekernel.ko "/github/workspace/out/$OUTPUT_NAME"
           
           echo "Copied to: /github/workspace/out/$OUTPUT_NAME"
@@ -65,5 +60,5 @@ jobs:
       - name: Upload rekernel.ko artifact
         uses: actions/upload-artifact@v7
         with:
-          name: rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko
-          path: /github/workspace/out/rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko
+          name: rekernel-${{ inputs.kmi }}.ko
+          path: /github/workspace/out/rekernel-${{ inputs.kmi }}.ko
