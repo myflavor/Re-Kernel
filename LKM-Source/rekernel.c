@@ -159,8 +159,9 @@ void line_binder_alloc_new_buf_locked(void *data, size_t size, struct binder_all
 #endif
 			if (netlink_socket != NULL) {
 				char binder_kmsg[PACKET_SIZE];
-				snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=free_buffer_full,oneway=1,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(current), task_uid(current).val, task_tgid_nr(p), task_uid(p).val, "FREE_BUFFER_FULL", -1);
-				sendMessage(binder_kmsg, strlen(binder_kmsg));
+				int len = snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=free_buffer_full,oneway=1,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(current), task_uid(current).val, task_tgid_nr(p), task_uid(p).val, "FREE_BUFFER_FULL", -1);
+				len = (len >= sizeof(binder_kmsg)) ? (sizeof(binder_kmsg) - 1) : len;
+				sendMessage(binder_kmsg, len);
 			}
 		}
 	}
@@ -198,8 +199,8 @@ void line_binder_reply(void *data, struct binder_proc *target_proc, struct binde
 #endif
 		if (netlink_socket != NULL) {
 			char binder_kmsg[PACKET_SIZE];
-			snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=reply,oneway=0,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(proc->tsk), task_uid(proc->tsk).val, task_tgid_nr(target_proc->tsk), task_uid(target_proc->tsk).val, "SYNC_BINDER_REPLY", -1);
-			sendMessage(binder_kmsg, strlen(binder_kmsg));
+			int len = scnprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=reply,oneway=0,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(proc->tsk), task_uid(proc->tsk).val, task_tgid_nr(target_proc->tsk), task_uid(target_proc->tsk).val, "SYNC_BINDER_REPLY", -1);
+			sendMessage(binder_kmsg, len);
 		}
 	}
 }
@@ -249,8 +250,8 @@ void line_binder_transaction(void *data, struct binder_proc *target_proc, struct
 #endif
 		if (netlink_socket != NULL) {
 			char binder_kmsg[PACKET_SIZE];
-			snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=transaction,oneway=0,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(proc->tsk), task_uid(proc->tsk).val, task_tgid_nr(target_proc->tsk), task_uid(target_proc->tsk).val, "SYNC_BINDER", -1);
-			sendMessage(binder_kmsg, strlen(binder_kmsg));
+			int len = scnprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=transaction,oneway=0,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(proc->tsk), task_uid(proc->tsk).val, task_tgid_nr(target_proc->tsk), task_uid(target_proc->tsk).val, "SYNC_BINDER", -1);
+			sendMessage(binder_kmsg, len);
 		}
 	}
 
@@ -278,8 +279,8 @@ void line_binder_transaction(void *data, struct binder_proc *target_proc, struct
 #endif
 			if (netlink_socket != NULL) {
 				char binder_kmsg[PACKET_SIZE];
-				snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=transaction,oneway=1,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(proc->tsk), task_uid(proc->tsk).val, task_tgid_nr(target_proc->tsk), task_uid(target_proc->tsk).val, buf, tr->code);
-			    sendMessage(binder_kmsg, strlen(binder_kmsg));
+				int len = scnprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=transaction,oneway=1,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(proc->tsk), task_uid(proc->tsk).val, task_tgid_nr(target_proc->tsk), task_uid(target_proc->tsk).val, buf, tr->code);
+				sendMessage(binder_kmsg, len);
 			}
 		}
 	}
@@ -417,8 +418,8 @@ void line_signal(void *data, int sig, struct task_struct *killer, struct task_st
 #endif
 		if (netlink_socket != NULL) {
 			char binder_kmsg[PACKET_SIZE];
-			snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Signal,signal=%d,killer_pid=%d,killer=%d,dst_pid=%d,dst=%d;", sig, task_tgid_nr(killer), task_uid(killer).val, task_tgid_nr(dst), task_uid(dst).val);
-			sendMessage(binder_kmsg, strlen(binder_kmsg));
+			int len = scnprintf(binder_kmsg, sizeof(binder_kmsg), "type=Signal,signal=%d,killer_pid=%d,killer=%d,dst_pid=%d,dst=%d;", sig, task_tgid_nr(killer), task_uid(killer).val, task_tgid_nr(dst), task_uid(dst).val);
+			sendMessage(binder_kmsg, len);
 		}
 	}
 }
@@ -546,16 +547,17 @@ static unsigned int rekernel_pkg_ipv4_ipv6_in(void *priv, struct sk_buff *socket
 #endif
 	if (netlink_socket != NULL) {
 		char binder_kmsg[PACKET_SIZE];
+		int len;
 		if (ip_hdr(socket_buffer)->version == 4) {
-			snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Network,target=%d,proto=ipv4,data_len=%d;", uid, data_len);
+			len = scnprintf(binder_kmsg, sizeof(binder_kmsg), "type=Network,target=%d,proto=ipv4,data_len=%d;", uid, data_len);
 #if IS_ENABLED(CONFIG_IPV6)
 		} else if (ip_hdr(socket_buffer)->version == 6) {
-			snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Network,target=%d,proto=ipv6,data_len=%d;", uid, data_len);
+			len = scnprintf(binder_kmsg, sizeof(binder_kmsg), "type=Network,target=%d,proto=ipv6,data_len=%d;", uid, data_len);
 #endif
 		} else {
 			return NF_ACCEPT;
 		}
-		sendMessage(binder_kmsg, strlen(binder_kmsg));
+		sendMessage(binder_kmsg, len);
 	}
 
 	return NF_ACCEPT;
