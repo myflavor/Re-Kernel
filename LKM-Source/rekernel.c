@@ -159,8 +159,7 @@ void line_binder_alloc_new_buf_locked(void *data, size_t size, struct binder_all
 #endif
 			if (netlink_socket != NULL) {
 				char binder_kmsg[PACKET_SIZE];
-				int len = snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=free_buffer_full,oneway=1,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(current), task_uid(current).val, task_tgid_nr(p), task_uid(p).val, "FREE_BUFFER_FULL", -1);
-				len = (len >= sizeof(binder_kmsg)) ? (sizeof(binder_kmsg) - 1) : len;
+				int len = scnprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=free_buffer_full,oneway=1,from_pid=%d,from=%d,target_pid=%d,target=%d,rpc_name=%s,code=%d;", task_tgid_nr(current), task_uid(current).val, task_tgid_nr(p), task_uid(p).val, "FREE_BUFFER_FULL", -1);
 				sendMessage(binder_kmsg, len);
 			}
 		}
