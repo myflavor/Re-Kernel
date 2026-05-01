@@ -15,6 +15,8 @@ jobs:
           - kmi: android14-5.15
             ddk_release: '20260313'
           - kmi: android14-6.1
+            ddk_release: '20250825'
+          - kmi: android14-6.1
             ddk_release: '20260313'
           - kmi: android15-6.6
             ddk_release: '20260313'
