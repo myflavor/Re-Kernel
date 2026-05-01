@@ -6,4 +6,14 @@ if [ -f "$MODDIR"/.boot ]; then
     rm "$MODDIR"/.boot
 else
     touch "$MODDIR"/.boot
+
+    for mod in "$MODDIR"/rekernel-*.ko; do
+        if [ -f "$mod" ]; then
+            if insmod "$mod" >/dev/null 2>&1; then
+                break
+            fi
+        fi
+    done
+
+    rm "$MODDIR"/.boot
 fi
