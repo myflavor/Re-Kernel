@@ -324,10 +324,10 @@ static bool binder_can_update_transaction(struct binder_transaction* t1, struct 
 static struct binder_transaction* binder_find_outdated_transaction_ilocked(struct binder_transaction* t,
 	struct list_head* target_list)
 {
-	struct binder_work *w;
+	struct binder_work* w;
 
 	list_for_each_entry(w, target_list, entry) {
-		struct binder_transaction *t_queued;
+		struct binder_transaction* t_queued;
 
 		if (w->type != BINDER_WORK_TRANSACTION)
 			continue;
