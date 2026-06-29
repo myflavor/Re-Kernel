@@ -43,13 +43,13 @@ void line_binder_alloc_new_buf_locked(void *data, size_t size, struct binder_all
 		rcu_read_unlock();
 		if (p != NULL && line_is_frozen(p)) {
 #ifdef DEBUG
-			pr_info("[Re-Kernel LKM] Binder Free buffer full! from=%d | target=%d\n", task_uid(current).val, task_uid(p).val);
+			pr_info("[ReKernel-X LKM] Binder Free buffer full! from=%d | target=%d\n", task_uid(current).val, task_uid(p).val);
 #endif
-			if (rekernel_netlink_ready()) {
-				struct rekernel_event event = {
-					.type = REKERNEL_EVT_BINDER,
+			if (rekernelx_netlink_ready()) {
+				struct rekernelx_event event = {
+					.type = REKERNELX_EVT_BINDER,
 					.u.binder = {
-						.binder_type = REKERNEL_BINDER_FREE_BUFFER_FULL,
+						.binder_type = REKERNELX_BINDER_FREE_BUFFER_FULL,
 						.oneway = 1,
 						.from_pid = task_tgid_nr(current),
 						.from_uid = task_uid(current).val,
@@ -93,13 +93,13 @@ void line_binder_reply(void *data, struct binder_proc *target_proc, struct binde
 		&& (proc->pid != target_proc->pid)
 		&& line_is_frozen(target_proc->tsk)) {
 #ifdef DEBUG
-		pr_info("[Re-Kernel LKM] Sync Binder Reply! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
+		pr_info("[ReKernel-X LKM] Sync Binder Reply! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
 #endif
-		if (rekernel_netlink_ready()) {
-			struct rekernel_event event = {
-				.type = REKERNEL_EVT_BINDER,
+		if (rekernelx_netlink_ready()) {
+			struct rekernelx_event event = {
+				.type = REKERNELX_EVT_BINDER,
 				.u.binder = {
-					.binder_type = REKERNEL_BINDER_REPLY,
+					.binder_type = REKERNELX_BINDER_REPLY,
 					.from_pid = task_tgid_nr(proc->tsk),
 					.from_uid = task_uid(proc->tsk).val,
 					.target_pid = task_tgid_nr(target_proc->tsk),
@@ -148,13 +148,13 @@ void line_binder_transaction(void *data, struct binder_proc *target_proc, struct
 		&& (proc->pid != target_proc->pid)
 		&& line_is_frozen(target_proc->tsk)) {
 #ifdef DEBUG
-		pr_info("[Re-Kernel LKM] Sync Binder Transaction! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
+		pr_info("[ReKernel-X LKM] Sync Binder Transaction! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
 #endif
-		if (rekernel_netlink_ready()) {
-			struct rekernel_event event = {
-				.type = REKERNEL_EVT_BINDER,
+		if (rekernelx_netlink_ready()) {
+			struct rekernelx_event event = {
+				.type = REKERNELX_EVT_BINDER,
 				.u.binder = {
-					.binder_type = REKERNEL_BINDER_TRANSACTION,
+					.binder_type = REKERNELX_BINDER_TRANSACTION,
 					.from_pid = task_tgid_nr(proc->tsk),
 					.from_uid = task_uid(proc->tsk).val,
 					.target_pid = task_tgid_nr(target_proc->tsk),
@@ -192,13 +192,13 @@ void line_binder_transaction(void *data, struct binder_proc *target_proc, struct
 				if (i == INTERFACETOKEN_BUFF_SIZE) rpc_name[i-1] = '\0';
 			}
 #ifdef DEBUG
-			pr_info("[Re-Kernel LKM] ASync Binder Transaction! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
+			pr_info("[ReKernel-X LKM] ASync Binder Transaction! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
 #endif
-			if (rekernel_netlink_ready()) {
-				struct rekernel_event event = {
-					.type = REKERNEL_EVT_BINDER,
+			if (rekernelx_netlink_ready()) {
+				struct rekernelx_event event = {
+					.type = REKERNELX_EVT_BINDER,
 					.u.binder = {
-						.binder_type = REKERNEL_BINDER_TRANSACTION,
+						.binder_type = REKERNELX_BINDER_TRANSACTION,
 						.oneway = 1,
 						.from_pid = task_tgid_nr(proc->tsk),
 						.from_uid = task_uid(proc->tsk).val,

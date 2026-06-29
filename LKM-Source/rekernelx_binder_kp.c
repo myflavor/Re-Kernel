@@ -1,7 +1,7 @@
 /*
  * Copyright (c) Sakion Team. All rights reserved.
  *
- * File name: rekernel_binder_kp.c
+ * File name: rekernelx_binder_kp.c
  * Description: rekernel binder hooks via kprobe — resolves internal binder
  *              symbols via kallsyms and intercepts binder_proc_transaction to
  *              drop outdated async transactions for frozen tasks.
@@ -126,7 +126,7 @@ static int __nocfi binder_proc_transaction_pre(struct kprobe* p, struct pt_regs*
 		if (t_outdated) {
 			struct binder_buffer* buffer = t_outdated->buffer;
 #ifdef DEBUG
-			pr_info("[Re-Kernel LKM] free_outdated txn %d supersedes %d\n", t->debug_id, t_outdated->debug_id);
+			pr_info("[ReKernel-X LKM] free_outdated txn %d supersedes %d\n", t->debug_id, t_outdated->debug_id);
 #endif
 			t_outdated->buffer = NULL;
 			buffer->transaction = NULL;

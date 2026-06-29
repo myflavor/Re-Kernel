@@ -1,12 +1,12 @@
 package cn.myflv.kernel;
 
-public class NativeReKernel {
+public class ReKernelX {
 
     static {
-        System.loadLibrary("ReKernel");
+        System.loadLibrary("ReKernelX");
     }
 
-    public static native boolean startListening(ReKernelCallback callback);
+    public static native boolean startListening(ReKernelXCallback callback);
 
     public static native void stopListening();
 

@@ -7,7 +7,7 @@ if [ -f "$MODDIR"/.boot ]; then
 else
     touch "$MODDIR"/.boot
 
-    for mod in "$MODDIR"/rekernel-*.ko; do
+    for mod in "$MODDIR"/rekernel_x-*.ko; do
         if [ -f "$mod" ]; then
             if insmod "$mod" >/dev/null 2>&1; then
                 break

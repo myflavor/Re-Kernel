@@ -1,6 +1,6 @@
 package cn.myflv.kernel;
 
-public interface ReKernelCallback {
+public interface ReKernelXCallback {
 
     /** binderType: a binder transaction call */
     int BINDER_TRANSACTION      = 0;
@@ -17,7 +17,7 @@ public interface ReKernelCallback {
     /**
      * Called only when the netlink connection drops unexpectedly
      * (recv error while still running). Not invoked on a clean
-     * {@link NativeReKernel#stopListening()}.
+     * {@link ReKernelX#stopListening()}.
      */
     void disconnected();
 

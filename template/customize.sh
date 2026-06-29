@@ -21,13 +21,13 @@ fi
 
 TARGET_VER="android${AND_VER}-${CORE_VER}"
 
-if ls $MODPATH/kmod/rekernel-${TARGET_VER}* >/dev/null 2>&1; then
+if ls $MODPATH/kmod/rekernel_x-${TARGET_VER}* >/dev/null 2>&1; then
     ui_print "- 自动匹配成功: $TARGET_VER"
 else
     abort "! 自动匹配失败，请查看安装脚本并自行修改"
 fi
 
-cp -fp "$MODPATH"/kmod/rekernel-${TARGET_VER}* "$MODPATH"/
+cp -fp "$MODPATH"/kmod/rekernel_x-${TARGET_VER}* "$MODPATH"/
 rm -rf $MODPATH/kmod
 
-ui_print "- 操作完成！内核端口ID: 100"REK_SRC="$MODPATH/module/${TARGET_VER}_rekernel.ko"
+ui_print "- 操作完成！内核端口ID: 100"

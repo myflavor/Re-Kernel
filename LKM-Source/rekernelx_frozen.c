@@ -15,7 +15,7 @@
 #include <linux/sched.h>
 #include "rekernel.h"
 
-static inline bool rekernel_is_frozen_state_compatible(struct task_struct *task)
+static inline bool rekernelx_is_frozen_state_compatible(struct task_struct *task)
 {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 	return READ_ONCE(task->__state) & TASK_FROZEN;
@@ -24,7 +24,7 @@ static inline bool rekernel_is_frozen_state_compatible(struct task_struct *task)
 #endif
 }
 
-static inline bool rekernel_is_jobctl_frozen_compatible(struct task_struct *task)
+static inline bool rekernelx_is_jobctl_frozen_compatible(struct task_struct *task)
 {
 #if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 10, 0))
 	return cgroup_task_freeze(task);
@@ -35,12 +35,12 @@ static inline bool rekernel_is_jobctl_frozen_compatible(struct task_struct *task
 
 bool line_is_frozen(struct task_struct *task)
 {
-	if (cgroup_task_frozen(task) || rekernel_is_jobctl_frozen_compatible(task))
+	if (cgroup_task_frozen(task) || rekernelx_is_jobctl_frozen_compatible(task))
 		return true;
 
 	/* if task->group_leader is NULL, unfreeze it to avoid some unknown problems */
 	if (NULL == task->group_leader)
 		return true;
 
-	return rekernel_is_frozen_state_compatible(task->group_leader) || freezing(task->group_leader);
+	return rekernelx_is_frozen_state_compatible(task->group_leader) || freezing(task->group_leader);
 }

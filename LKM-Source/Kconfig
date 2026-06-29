@@ -1,10 +1,10 @@
-menu "Re:Kernel"
+menu "ReKernel-X"
 
-config REKERNEL
-	bool "Re:Kernel module"
+config REKERNEL_X
+	bool "ReKernel-X module"
 	depends on MODULES
 	default n
 	help
 	  Make tombstone users get a better experience.
-	  Tips: Enabling this will build Re-Kernel as a module
+	  Tips: Enabling this will build ReKernel-X as a module
 endmenu

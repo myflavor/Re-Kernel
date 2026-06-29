@@ -1,4 +1,4 @@
-name: Build ReKernel AAR
+name: Build ReKernelX AAR
 
 on:
   workflow_dispatch:
@@ -31,12 +31,12 @@ jobs:
         working-directory: Develop/aar
         run: |
           chmod +x gradlew
-          ./gradlew :rekernel:assembleRelease
+          ./gradlew :rekernelx:assembleRelease
 
       - name: Verify AAR
         working-directory: Develop/aar
         run: |
-          AAR=rekernel/build/outputs/aar/rekernel-release.aar
+          AAR=rekernelx/build/outputs/aar/rekernelx-release.aar
           echo "=== AAR size ==="
           ls -lh "$AAR"
           echo ""
@@ -59,6 +59,6 @@ jobs:
       - name: Upload AAR artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rekernel-aar
-          path: Develop/aar/rekernel/build/outputs/aar/rekernel-release.aar
+          name: rekernelx-aar
+          path: Develop/aar/rekernelx/build/outputs/aar/rekernelx-release.aar
           retention-days: 30

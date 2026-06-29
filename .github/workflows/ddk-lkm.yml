@@ -1,4 +1,4 @@
-name: Build Re:Kernel Kernel Module
+name: Build ReKernel-X Kernel Module
 
 on:
   workflow_call:
@@ -13,14 +13,14 @@ on:
         default: '20260313'
         type: string
       version:
-        description: 'Re:Kernel version'
+        description: 'ReKernel-X version'
         required: false
         default: 'snapshot'
         type: string
 
 jobs:
-  build-rekernel-ko:
-    name: Build rekernel.ko for ${{ inputs.kmi }}-${{ inputs.ddk_release }}
+  build-rekernelx-ko:
+    name: Build rekernel_x.ko for ${{ inputs.kmi }}-${{ inputs.ddk_release }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/ylarod/ddk:${{ inputs.kmi }}-${{ inputs.ddk_release }}
@@ -30,12 +30,12 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v6
 
-      - name: Build rekernel.ko
+      - name: Build rekernel_x.ko
         run: |
-          
+
           KMI=${{ inputs.kmi }}
-          
-          echo "=== Building rekernel.ko for KMI: $KMI ==="
+
+          echo "=== Building rekernel_x.ko for KMI: $KMI ==="
 
           # sources -> in-tree binder dir (skip Makefile/Kconfig/README)
           cp ./LKM-Source/*.c ./LKM-Source/*.h /opt/ddk/src/$KMI/drivers/android/
@@ -45,22 +45,22 @@ jobs:
           cd /opt/ddk/src/$KMI
           make -C /opt/ddk/kdir/$KMI \
             M=/opt/ddk/src/$KMI/drivers/android \
-            CONFIG_REKERNEL=m \
+            CONFIG_REKERNEL_X=m \
             CC="clang" \
-            REKERNEL_VERSION="${{ inputs.version }}" \
+            REKERNELX_VERSION="${{ inputs.version }}" \
             modules
 
           echo "=== Build completed ==="
 
           # Artifact
           mkdir -p /github/workspace/out
-          OUTPUT_NAME="rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko"
-          cp /opt/ddk/src/$KMI/drivers/android/rekernel.ko "/github/workspace/out/$OUTPUT_NAME"
+          OUTPUT_NAME="rekernel_x-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko"
+          cp /opt/ddk/src/$KMI/drivers/android/rekernel_x.ko "/github/workspace/out/$OUTPUT_NAME"
           llvm-strip -d "/github/workspace/out/$OUTPUT_NAME"
           ls -la "/github/workspace/out/$OUTPUT_NAME"
 
-      - name: Upload rekernel.ko artifact
+      - name: Upload rekernel_x.ko artifact
         uses: actions/upload-artifact@v7
         with:
-          name: rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko
-          path: /github/workspace/out/rekernel-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko
+          name: rekernel_x-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko
+          path: /github/workspace/out/rekernel_x-${{ inputs.kmi }}-${{ inputs.ddk_release }}.ko

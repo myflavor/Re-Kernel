@@ -1,20 +1,20 @@
 # LKM Source
 
-Re:Kernel Loadable Kernel Module source code. Supports GKI kernels from Android 12 (5.10) through Android 16 (6.12).
+ReKernel-X Loadable Kernel Module source code. Supports GKI kernels from Android 12 (5.10) through Android 16 (6.12).
 
 ## Source Files
 
 | File | Description |
 |---|---|
-| `rekernel_main.c` | Module entry/exit, init/exit glue |
-| `rekernel_genl.c` | Generic Netlink transport |
-| `rekernel_binder.c` | Binder transaction hooks |
-| `rekernel_binder_kp.c` | Binder kprobe hooks |
-| `rekernel_signal.c` | Signal hooks |
-| `rekernel_netfilter.c` | Netfilter hooks |
-| `rekernel_netuid.c` | Network monitor UID hashmap |
-| `rekernel_frozen.c` | Task frozen-state predicate |
-| `rekernel.h` | Shared header, ABI definitions |
+| `rekernelx_main.c` | Module entry/exit, init/exit glue |
+| `rekernelx_genl.c` | Generic Netlink transport |
+| `rekernelx_binder.c` | Binder transaction hooks |
+| `rekernelx_binder_kp.c` | Binder kprobe hooks |
+| `rekernelx_signal.c` | Signal hooks |
+| `rekernelx_netfilter.c` | Netfilter hooks |
+| `rekernelx_netuid.c` | Network monitor UID hashmap |
+| `rekernelx_frozen.c` | Task frozen-state predicate |
+| `rekernelx.h` | Shared header, ABI definitions |
 | `Makefile` | Kernel module build rules |
 | `Kconfig` | Kernel config option |
 
@@ -31,20 +31,20 @@ cat Makefile >> /opt/ddk/src/<KMI>/drivers/android/Makefile
 cd /opt/ddk/src/<KMI>
 make -C /opt/ddk/kdir/<KMI> \
     M=/opt/ddk/src/<KMI>/drivers/android \
-    CONFIG_REKERNEL=m \
+    CONFIG_REKERNEL_X=m \
     CC="clang" \
-    REKERNEL_VERSION="v1.0" \
+    REKERNELX_VERSION="v1.0" \
     modules
 ```
 
 ## Version
 
-The module version is defined in `rekernel.h`:
+The module version is defined in `rekernelx.h`:
 
 ```c
-#ifndef REKERNEL_VERSION
-#define REKERNEL_VERSION "snapshot"
+#ifndef REKERNELX_VERSION
+#define REKERNELX_VERSION "snapshot"
 #endif
 ```
 
-Pass `REKERNEL_VERSION` as a make variable to override the default `snapshot` value. The version is printed in `dmesg` on module load.
+Pass `REKERNELX_VERSION` as a make variable to override the default `snapshot` value. The version is printed in `dmesg` on module load.

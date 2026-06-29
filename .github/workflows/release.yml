@@ -1,4 +1,4 @@
-name: Release Re:Kernel
+name: Release ReKernel-X
 
 on:
   workflow_dispatch:
@@ -17,40 +17,6 @@ on:
         type: string
 
 jobs:
-  build-aar:
-    name: Build AAR
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v6
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install NDK and CMake
-        run: |
-          sdkmanager --install \
-            "ndk;27.0.12077973" \
-            "cmake;3.22.1"
-
-      - name: Build AAR
-        working-directory: Develop/aar
-        run: |
-          chmod +x gradlew
-          ./gradlew :rekernel:assembleRelease
-
-      - name: Upload AAR artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rekernel-aar
-          path: Develop/aar/rekernel/build/outputs/aar/rekernel-release.aar
-
   build-lkm:
     name: Build LKM
     strategy:
@@ -82,7 +48,7 @@ jobs:
 
   package:
     name: Package Magisk ZIP
-    needs: [build-aar, build-lkm]
+    needs: build-lkm
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
@@ -92,7 +58,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: kmod-artifacts
-          pattern: rekernel-*.ko
+          pattern: rekernel_x-*.ko
 
       - name: Prepare Magisk module
         run: |
@@ -100,30 +66,30 @@ jobs:
           VERSION_CODE=${{ inputs.versionCode }}
 
           # Copy template
-          cp -r template Re-Kernel
+          cp -r template ReKernel-X
 
           # Replace version placeholders in module.prop
-          sed -i "s/@VERSION@/${VERSION}/g" Re-Kernel/module.prop
-          sed -i "s/@VERSION_CODE@/${VERSION_CODE}/g" Re-Kernel/module.prop
+          sed -i "s/@VERSION@/${VERSION}/g" ReKernel-X/module.prop
+          sed -i "s/@VERSION_CODE@/${VERSION_CODE}/g" ReKernel-X/module.prop
 
           # Collect all .ko files into kmod/
-          mkdir -p Re-Kernel/kmod
-          for dir in kmod-artifacts/rekernel-*.ko/; do
-            cp "$dir"/*.ko Re-Kernel/kmod/
+          mkdir -p ReKernel-X/kmod
+          for dir in kmod-artifacts/rekernel_x-*.ko/; do
+            cp "$dir"/*.ko ReKernel-X/kmod/
           done
 
           echo "=== kmod contents ==="
-          ls -lh Re-Kernel/kmod/
+          ls -lh ReKernel-X/kmod/
 
           # Pack ZIP
-          cd Re-Kernel
-          zip -r ../Re-Kernel-${VERSION}.zip .
+          cd ReKernel-X
+          zip -r ../ReKernel-X-${VERSION}.zip .
 
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rekernel-zip
-          path: Re-Kernel-${{ inputs.version }}.zip
+          name: rekernelx-zip
+          path: ReKernel-X-${{ inputs.version }}.zip
 
   release:
     name: Create GitHub Release
@@ -138,16 +104,7 @@ jobs:
       - name: Download ZIP
         uses: actions/download-artifact@v4
         with:
-          name: rekernel-zip
-
-      - name: Download AAR
-        uses: actions/download-artifact@v4
-        with:
-          name: rekernel-aar
-
-      - name: Rename AAR
-        run: |
-          mv rekernel-release.aar rekernel-${{ inputs.version }}.aar
+          name: rekernelx-zip
 
       - name: Push update.json to magisk branch
         env:
@@ -163,7 +120,7 @@ jobs:
           {
             "version": "${VERSION}",
             "versionCode": ${VERSION_CODE},
-            "zipUrl": "https://github.com/${REPO}/releases/download/${VERSION}/Re-Kernel-${VERSION}.zip",
+            "zipUrl": "https://github.com/${REPO}/releases/download/${VERSION}/ReKernel-X-${VERSION}.zip",
             "changelog": "https://raw.githubusercontent.com/${REPO}/magisk/update.md"
           }
           EOF
@@ -189,7 +146,6 @@ jobs:
           VERSION=${{ inputs.version }}
 
           gh release create "$VERSION" \
-            --title "Re:Kernel $VERSION" \
+            --title "ReKernel-X $VERSION" \
             --notes "${{ inputs.changelog }}" \
-            Re-Kernel-${VERSION}.zip \
-            rekernel-${VERSION}.aar
+            ReKernel-X-${VERSION}.zip
