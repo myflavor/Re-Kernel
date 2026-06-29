@@ -43,9 +43,18 @@ bool net_uid_monitored(uid_t uid)
 /* add a uid to the monitor map (no-op if already present). Caller must NOT hold the mutex. */
 void net_uid_add(uid_t uid)
 {
+	struct uid_info *entry;
+	bool found = false;
+
 	mutex_lock(&rekernel_x_net_uid_mutex);
-	if (!net_uid_monitored(uid)) {
-		struct uid_info *entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+	hash_for_each_possible(rekernel_x_net_uid_map, entry, hnode, uid) {
+		if (entry->uid == uid) {
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		entry = kmalloc(sizeof(*entry), GFP_KERNEL);
 		if (entry) {
 			entry->uid = uid;
 			hash_add_rcu(rekernel_x_net_uid_map, &entry->hnode, uid);
