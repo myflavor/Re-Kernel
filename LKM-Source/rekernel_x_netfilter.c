@@ -194,8 +194,8 @@ static void __unregister_netfilter(void)
 void unregister_netfilter(void)
 {
 	if (re_netfilter_registered) {
-		re_netfilter_registered = false;
 		__unregister_netfilter();
+		re_netfilter_registered = false;
 	}
 }
 
