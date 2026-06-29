@@ -12,7 +12,7 @@
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <trace/hooks/signal.h>
-#include "rekernel.h"
+#include "rekernel_x.h"
 
 void line_signal(void *data, int sig, struct task_struct *killer, struct task_struct *dst)
 {

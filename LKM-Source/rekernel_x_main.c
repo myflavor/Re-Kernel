@@ -10,7 +10,7 @@
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include "rekernel.h"
+#include "rekernel_x.h"
 
 static int __init start_rekernel(void)
 {

@@ -16,7 +16,7 @@
 #include <linux/netlink.h>
 #include <net/sock.h>
 #include <net/genetlink.h>
-#include "rekernel.h"
+#include "rekernel_x.h"
 
 static bool rekernel_x_genl_registered = false;
 

@@ -49,7 +49,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rekernel_x-aar
-          path: Develop/aar/rekernelx/build/outputs/aar/rekernel_x-release.aar
+          path: Develop/aar/rekernel_x/build/outputs/aar/rekernel_x-release.aar
 
   build-lkm:
     name: Build LKM

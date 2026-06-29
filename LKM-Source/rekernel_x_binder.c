@@ -17,7 +17,7 @@
 #include <linux/string.h>
 #include <trace/hooks/binder.h>
 #include <../android/binder_internal.h>
-#include "rekernel.h"
+#include "rekernel_x.h"
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
 void line_binder_alloc_new_buf_locked(void *data, size_t size, size_t *free_async_space, int is_async, bool *should_fail)

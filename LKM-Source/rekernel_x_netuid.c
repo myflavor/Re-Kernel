@@ -16,7 +16,7 @@
 #include <linux/hashtable.h>
 #include <linux/slab.h>
 #include <linux/rcupdate.h>
-#include "rekernel.h"
+#include "rekernel_x.h"
 
 /* hashmap for net monitor uids */
 #define REKERNEL_X_NET_UID_HASH_BITS 6

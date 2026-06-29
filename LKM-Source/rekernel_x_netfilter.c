@@ -23,7 +23,7 @@
 #include <net/ipv6.h>
 #include <net/tcp.h>
 #include <linux/rcupdate.h>
-#include "rekernel.h"
+#include "rekernel_x.h"
 
 static inline uid_t line_sock2uid(struct sock *sk)
 {

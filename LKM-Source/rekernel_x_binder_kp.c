@@ -16,7 +16,7 @@
 #include <linux/slab.h>
 #include <linux/kprobes.h>
 #include <../android/binder_internal.h>
-#include "rekernel.h"
+#include "rekernel_x.h"
 
 static unsigned long (*re_kallsyms_lookup_name)(const char* name);
 static void (*re_binder_transaction_buffer_release)(struct binder_proc* proc, struct binder_thread* thread, struct binder_buffer* buffer, binder_size_t off_end_offset, bool is_failure);
