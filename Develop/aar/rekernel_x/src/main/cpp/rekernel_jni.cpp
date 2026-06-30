@@ -1,12 +1,4 @@
-/*
- * ReKernelX JNI — Generic Netlink client for ReKernel-X LKM.
- *
- * Connects to the kernel "rekernel_x" genl family, joins the "events" multicast
- * group, receives nested-attribute event messages and dispatches them to the
- * Java ReKernelXCallback interface.
- *
- * ABI contract: attribute IDs must stay in sync with LKM-Source/rekernel_x.h.
- */
+/* ReKernelX JNI — Generic Netlink client for ReKernel-X LKM. */
 #include <jni.h>
 #include <android/log.h>
 
@@ -16,9 +8,13 @@
 #include <cstdlib>
 #include <cstdint>
 #include <mutex>
+#include <condition_variable>
 
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/eventfd.h>
+#include <poll.h>
+#include <pthread.h>
 #include <linux/netlink.h>
 #include <linux/genetlink.h>
 
@@ -29,9 +25,6 @@
 /* ==========================================================================
  *  ABI mirror — attribute IDs must match LKM-Source/rekernel_x.h.
  * ========================================================================== */
-
-/* SOL_NETLINK / NETLINK_ADD_MEMBERSHIP come from the system headers
- * (<sys/socket.h>, <linux/netlink.h>) — no local fallback. */
 
 /* rekernel genl commands */
 #define REKERNEL_X_C_EVENT                1
@@ -83,27 +76,21 @@
 #define REKERNEL_X_RPC_NAME_LEN       140
 
 /* ==========================================================================
- *  NLA (NetLink Attribute) helpers
- *
- *  These mirror the kernel's nla_for_each_attr / nla_find patterns.
+ *  NLA (NetLink Attribute) helpers — mirror the kernel's nla_ok/nla_for_each.
  * ========================================================================== */
 
 static inline uint16_t nla_align(uint16_t len) {
     return (len + 3) & ~3;
 }
 
-/* Iterate NLA attributes in a raw byte buffer.
- *   pos  — current byte offset (updated by the macro)
- *   end  — one-past-last valid byte offset
- *   nla  — pointer to current struct nlattr
- */
+/* Iterate NLA attributes in [pos, end). Whole attr (hdr+payload) must fit. */
 #define NLA_FOR_EACH_ATTR(pos, end, nla, buf) \
     for (auto *nla = reinterpret_cast<struct nlattr *>(buf + (pos)); \
-         (pos) + NLA_HDRLEN <= (end) && (nla)->nla_len >= NLA_HDRLEN; \
+         (pos) + NLA_HDRLEN <= (end) && (nla)->nla_len >= NLA_HDRLEN && \
+         (pos) + (nla)->nla_len <= (end); \
          (pos) += nla_align((nla)->nla_len), \
          nla = reinterpret_cast<struct nlattr *>(buf + (pos)))
 
-/* Read the attribute's data pointer. */
 static inline void *nla_data(struct nlattr *nla) {
     return reinterpret_cast<uint8_t *>(nla) + NLA_HDRLEN;
 }
@@ -125,12 +112,17 @@ static jmethodID         g_mid_signal       = nullptr;
 static jmethodID         g_mid_network      = nullptr;
 
 static int               g_fd               = -1;
+static int               g_wakefd           = -1; /* eventfd: wakes recv thread out of poll() */
 static uint16_t          g_family_id        = 0;
 static uint32_t          g_mcast_group_id   = 0;
 static std::atomic<uint32_t> g_seq{1};
 static std::atomic<bool> g_running{false};
 static pthread_t         g_thread           = 0;
-static std::mutex        g_send_mutex;
+static std::mutex        g_send_mutex;   /* guards g_fd against concurrent close in send */
+static std::mutex        g_start_mutex;  /* serialises startListening()/stopListening() */
+/* recv_thread is detached; it clears g_thread and notifies on exit so
+ * stopListening() can wait for a clean exit without pthread_join(). */
+static std::condition_variable g_thread_cv;
 
 /* ==========================================================================
  *  Netlink socket helpers
@@ -156,10 +148,7 @@ static int nl_recv(void *buf, size_t bufsize) {
  *  genl family resolution
  * ========================================================================== */
 
-/*
- * Find the multicast group ID matching `target_name` inside a
- * CTRL_ATTR_MCAST_GROUPS nested attribute.
- */
+/* Find the multicast group ID matching target_name inside CTRL_ATTR_MCAST_GROUPS. */
 static uint32_t find_mcast_group_id(struct nlattr *mcast_attr,
                                     const char *target_name) {
     int pos = 0;
@@ -192,12 +181,8 @@ static uint32_t find_mcast_group_id(struct nlattr *mcast_attr,
     return 0;
 }
 
-/*
- * Send CTRL_CMD_GETFAMILY for "rekernel_x", parse the reply to populate
- * g_family_id and g_mcast_group_id.
- */
+/* Send CTRL_CMD_GETFAMILY, parse reply into g_family_id / g_mcast_group_id. */
 static int resolveFamily() {
-    /* Build request: nlmsghdr + genlmsghdr + CTRL_ATTR_FAMILY_NAME */
     const char *name = REKERNEL_X_GENL_FAMILY_NAME;
     uint16_t name_len  = static_cast<uint16_t>(strlen(name) + 1);
     uint16_t attr_len  = NLA_HDRLEN + name_len;
@@ -227,14 +212,14 @@ static int resolveFamily() {
         return -1;
     }
 
-    /* Temporary 3s recv timeout just for this reply, then restore blocking
-     * default — the recv thread must stay blocked, not busy-poll. */
+    /* 3s recv timeout for this one-shot reply. */
     struct timeval rcvto = {3, 0};
     setsockopt(g_fd, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
 
     uint8_t reply[4096];
     int rlen = nl_recv(reply, sizeof(reply));
 
+    /* Back to blocking — steady-state wake is via poll()+eventfd, not timeout. */
     struct timeval blockto = {0, 0};
     setsockopt(g_fd, SOL_SOCKET, SO_RCVTIMEO, &blockto, sizeof(blockto));
 
@@ -249,7 +234,6 @@ static int resolveFamily() {
         return -1;
     }
 
-    /* Parse reply attributes */
     uint16_t fid = 0;
     uint32_t gid = 0;
     bool have_fid = false;
@@ -310,7 +294,6 @@ static int sendCommand(uint8_t cmd, uint32_t uid) {
     nla->nla_type = REKERNEL_X_A_UID;
     *static_cast<uint32_t *>(nla_data(nla)) = uid;
 
-    /* g_send_mutex guards the fd against concurrent close in cleanup_globals. */
     std::lock_guard<std::mutex> lock(g_send_mutex);
     if (g_fd < 0)
         return -1;
@@ -336,13 +319,20 @@ static void dispatch_event(JNIEnv *env, uint8_t event_type, struct nlattr *paylo
             NLA_FOR_EACH_ATTR(bpos, bend, ba, bbase) {
                 int btype = ba->nla_type & NLA_TYPE_MASK;
                 switch (btype) {
-                    case REKERNEL_X_A_BINDER_TYPE:     binder_type = *static_cast<int32_t *>(nla_data(ba)); break;
-                    case REKERNEL_X_A_BINDER_ONEWAY:   oneway = *static_cast<int32_t *>(nla_data(ba)); break;
-                    case REKERNEL_X_A_BINDER_FROM_PID: from_pid = *static_cast<int32_t *>(nla_data(ba)); break;
-                    case REKERNEL_X_A_BINDER_FROM_UID: from_uid = *static_cast<uint32_t *>(nla_data(ba)); break;
-                    case REKERNEL_X_A_BINDER_TARGET_PID: target_pid = *static_cast<int32_t *>(nla_data(ba)); break;
-                    case REKERNEL_X_A_BINDER_TARGET_UID: target_uid = *static_cast<uint32_t *>(nla_data(ba)); break;
-                    case REKERNEL_X_A_BINDER_CODE:     code = *static_cast<int32_t *>(nla_data(ba)); break;
+                    case REKERNEL_X_A_BINDER_TYPE:
+                        if (nla_datalen(ba) >= 4) binder_type = *static_cast<int32_t *>(nla_data(ba)); break;
+                    case REKERNEL_X_A_BINDER_ONEWAY:
+                        if (nla_datalen(ba) >= 4) oneway = *static_cast<int32_t *>(nla_data(ba)); break;
+                    case REKERNEL_X_A_BINDER_FROM_PID:
+                        if (nla_datalen(ba) >= 4) from_pid = *static_cast<int32_t *>(nla_data(ba)); break;
+                    case REKERNEL_X_A_BINDER_FROM_UID:
+                        if (nla_datalen(ba) >= 4) from_uid = *static_cast<uint32_t *>(nla_data(ba)); break;
+                    case REKERNEL_X_A_BINDER_TARGET_PID:
+                        if (nla_datalen(ba) >= 4) target_pid = *static_cast<int32_t *>(nla_data(ba)); break;
+                    case REKERNEL_X_A_BINDER_TARGET_UID:
+                        if (nla_datalen(ba) >= 4) target_uid = *static_cast<uint32_t *>(nla_data(ba)); break;
+                    case REKERNEL_X_A_BINDER_CODE:
+                        if (nla_datalen(ba) >= 4) code = *static_cast<int32_t *>(nla_data(ba)); break;
                     case REKERNEL_X_A_BINDER_RPC_NAME: {
                         int slen = nla_datalen(ba);
                         if (slen > REKERNEL_X_RPC_NAME_LEN) slen = REKERNEL_X_RPC_NAME_LEN;
@@ -375,11 +365,16 @@ static void dispatch_event(JNIEnv *env, uint8_t event_type, struct nlattr *paylo
             NLA_FOR_EACH_ATTR(spos, send, sa, sbase) {
                 int stype = sa->nla_type & NLA_TYPE_MASK;
                 switch (stype) {
-                    case REKERNEL_X_A_SIGNAL_SIGNAL:     sig = *static_cast<int32_t *>(nla_data(sa)); break;
-                    case REKERNEL_X_A_SIGNAL_KILLER_PID: killer_pid = *static_cast<int32_t *>(nla_data(sa)); break;
-                    case REKERNEL_X_A_SIGNAL_KILLER_UID: killer_uid = *static_cast<uint32_t *>(nla_data(sa)); break;
-                    case REKERNEL_X_A_SIGNAL_DST_PID:    dst_pid = *static_cast<int32_t *>(nla_data(sa)); break;
-                    case REKERNEL_X_A_SIGNAL_DST_UID:    dst_uid = *static_cast<uint32_t *>(nla_data(sa)); break;
+                    case REKERNEL_X_A_SIGNAL_SIGNAL:
+                        if (nla_datalen(sa) >= 4) sig = *static_cast<int32_t *>(nla_data(sa)); break;
+                    case REKERNEL_X_A_SIGNAL_KILLER_PID:
+                        if (nla_datalen(sa) >= 4) killer_pid = *static_cast<int32_t *>(nla_data(sa)); break;
+                    case REKERNEL_X_A_SIGNAL_KILLER_UID:
+                        if (nla_datalen(sa) >= 4) killer_uid = *static_cast<uint32_t *>(nla_data(sa)); break;
+                    case REKERNEL_X_A_SIGNAL_DST_PID:
+                        if (nla_datalen(sa) >= 4) dst_pid = *static_cast<int32_t *>(nla_data(sa)); break;
+                    case REKERNEL_X_A_SIGNAL_DST_UID:
+                        if (nla_datalen(sa) >= 4) dst_uid = *static_cast<uint32_t *>(nla_data(sa)); break;
                 }
             }
 
@@ -400,9 +395,12 @@ static void dispatch_event(JNIEnv *env, uint8_t event_type, struct nlattr *paylo
             NLA_FOR_EACH_ATTR(npos, nend, na, nbase) {
                 int ntype = na->nla_type & NLA_TYPE_MASK;
                 switch (ntype) {
-                    case REKERNEL_X_A_NETWORK_PROTO:       proto = *static_cast<int32_t *>(nla_data(na)); break;
-                    case REKERNEL_X_A_NETWORK_TARGET_UID:  target_uid = *static_cast<uint32_t *>(nla_data(na)); break;
-                    case REKERNEL_X_A_NETWORK_DATA_LEN:    data_len = *static_cast<int32_t *>(nla_data(na)); break;
+                    case REKERNEL_X_A_NETWORK_PROTO:
+                        if (nla_datalen(na) >= 4) proto = *static_cast<int32_t *>(nla_data(na)); break;
+                    case REKERNEL_X_A_NETWORK_TARGET_UID:
+                        if (nla_datalen(na) >= 4) target_uid = *static_cast<uint32_t *>(nla_data(na)); break;
+                    case REKERNEL_X_A_NETWORK_DATA_LEN:
+                        if (nla_datalen(na) >= 4) data_len = *static_cast<int32_t *>(nla_data(na)); break;
                 }
             }
 
@@ -444,9 +442,33 @@ static void *recv_thread(void *) {
     bool had_error = false;
 
     while (g_running.load()) {
+        /* Block on netlink fd + wake eventfd; whichever fires wakes poll(). */
+        struct pollfd pfds[2] = {};
+        pfds[0].fd = g_fd;
+        pfds[0].events = POLLIN;
+        pfds[1].fd = g_wakefd;
+        pfds[1].events = POLLIN;
+
+        int pr = poll(pfds, 2, -1);
+        if (pr < 0) {
+            if (errno == EINTR)
+                continue;
+            had_error = true;
+            LOGE("recv_thread: poll error: %s", strerror(errno));
+            break;
+        }
+        /* Stop signal — drain and exit. */
+        if (pfds[1].revents & POLLIN) {
+            eventfd_t val;
+            (void)eventfd_read(g_wakefd, &val);
+            break;
+        }
+        if (!(pfds[0].revents & POLLIN))
+            continue;
+
         int rlen = nl_recv(rbuf, sizeof(rbuf));
         if (rlen < 0) {
-            /* EINTR/EAGAIN/ENOBUFS are transient — retry, don't disconnect. */
+            /* EINTR/EAGAIN/ENOBUFS are transient. */
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS)
                 continue;
             had_error = true;
@@ -456,7 +478,6 @@ static void *recv_thread(void *) {
         if (rlen == 0)
             continue;
 
-        /* Iterate netlink messages in the datagram */
         for (auto *nlh = reinterpret_cast<struct nlmsghdr *>(rbuf);
              NLMSG_OK(nlh, static_cast<size_t>(rlen));
              nlh = NLMSG_NEXT(nlh, rlen)) {
@@ -473,7 +494,6 @@ static void *recv_thread(void *) {
             if (ghdr->cmd != REKERNEL_X_C_EVENT)
                 continue;
 
-            /* Find REKERNEL_X_A_EVENT (nested) attribute */
             int pos = NLMSG_HDRLEN + GENL_HDRLEN;
             int end = static_cast<int>(nlh->nlmsg_len);
 
@@ -482,7 +502,6 @@ static void *recv_thread(void *) {
                 if (atype != REKERNEL_X_A_EVENT || nla_datalen(attr) < NLA_HDRLEN)
                     continue;
 
-                /* Parse inside the REKERNEL_X_A_EVENT nest */
                 int epos = 0, eend = nla_datalen(attr);
                 auto *ebase = static_cast<uint8_t *>(nla_data(attr));
                 uint8_t event_type = 0;
@@ -506,24 +525,57 @@ static void *recv_thread(void *) {
         }
     }
 
-    /* Clean stop (g_running cleared) doesn't fire disconnected; only a recv
-     * error while still running does. */
-    const bool clean_shutdown = had_error ? !g_running.load() : true;
-    if (!clean_shutdown) {
-        /* Close the fd so a later sendCommand fails fast; keep g_running true
-         * so stopListening() still does full teardown. */
-        {
-            std::lock_guard<std::mutex> lock(g_send_mutex);
-            if (g_fd >= 0) {
-                shutdown(g_fd, SHUT_RDWR);
-                close(g_fd);
-                g_fd = -1;
-            }
+    /* A recv error while still running is a disconnect (fires the callback);
+     * a wakefd-induced stop exit is clean (no callback). */
+    const bool fire_callback = had_error && g_running.load();
+
+    {
+        std::lock_guard<std::mutex> lock(g_send_mutex);
+        if (g_fd >= 0) {
+            close(g_fd);
+            g_fd = -1;
         }
-        /* Callback outside the mutex — the handler may reenter native. */
-        if (g_callback && g_mid_disconnected)
-            env->CallVoidMethod(g_callback, g_mid_disconnected);
     }
+    if (g_wakefd >= 0) {
+        close(g_wakefd);
+        g_wakefd = -1;
+    }
+    g_running.store(false);
+
+    /* Clear our slot before the callback so a reconnecting startListening()
+     * sees clean state and never calls cleanup_globals() from this thread. */
+    {
+        std::lock_guard<std::mutex> lk(g_start_mutex);
+        g_thread = 0;
+    }
+    g_thread_cv.notify_all();
+
+    /* Pin the callback via a local ref and delete the global ref first, so
+     * the object whose method is on the stack is never deleted mid-call. */
+
+    if (fire_callback && g_callback && g_mid_disconnected) {
+        jobject cb = env->NewLocalRef(g_callback);
+        env->DeleteGlobalRef(g_callback);
+        g_callback = nullptr;
+        if (cb)
+            env->CallVoidMethod(cb, g_mid_disconnected);
+        if (cb)
+            env->DeleteLocalRef(cb);
+    } else if (g_callback) {
+        env->DeleteGlobalRef(g_callback);
+        g_callback = nullptr;
+    }
+    if (g_cbClass) {
+        env->DeleteGlobalRef(g_cbClass);
+        g_cbClass = nullptr;
+    }
+    g_mid_disconnected = nullptr;
+    g_mid_binder       = nullptr;
+    g_mid_signal       = nullptr;
+    g_mid_network      = nullptr;
+    g_family_id        = 0;
+    g_mcast_group_id   = 0;
+    g_seq.store(1);
 
     if (env->ExceptionCheck()) {
         env->ExceptionDescribe();
@@ -541,22 +593,21 @@ static void *recv_thread(void *) {
  *  JNI lifecycle
  * ========================================================================== */
 
+/* Roll back partial state when startListening() fails partway through.
+ * Only called on the Java thread with no live recv_thread. */
 static void cleanup_globals(JNIEnv *env) {
     g_running.store(false);
 
-    /* shutdown() wakes the recv thread; close under g_send_mutex to exclude
-     * concurrent sendCommand. */
     {
         std::lock_guard<std::mutex> lock(g_send_mutex);
         if (g_fd >= 0) {
-            shutdown(g_fd, SHUT_RDWR);
             close(g_fd);
             g_fd = -1;
         }
     }
-    if (g_thread) {
-        pthread_join(g_thread, nullptr);
-        g_thread = 0;
+    if (g_wakefd >= 0) {
+        close(g_wakefd);
+        g_wakefd = -1;
     }
     if (g_callback) {
         env->DeleteGlobalRef(g_callback);
@@ -574,20 +625,31 @@ static void cleanup_globals(JNIEnv *env) {
     g_family_id        = 0;
     g_mcast_group_id   = 0;
     g_seq.store(1);
+    {
+        std::lock_guard<std::mutex> lk(g_start_mutex);
+        g_thread = 0;
+    }
+    g_thread_cv.notify_all();
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_cn_myflv_kernel_ReKernelX_startListening(
         JNIEnv *env, jclass /* clazz */, jobject callback) {
 
+    std::lock_guard<std::mutex> startLock(g_start_mutex);
+
     if (g_running.load()) {
         LOGI("startListening: already running");
         return JNI_FALSE;
     }
 
+    /* Tear down stale state from a prior recv-error disconnect. */
+    if (g_thread != 0 || g_wakefd >= 0 || g_fd >= 0 || g_callback != nullptr) {
+        cleanup_globals(env);
+    }
+
     env->GetJavaVM(&g_jvm);
 
-    /* Resolve callback method IDs (must run on app thread for FindClass) */
     jclass cls = env->FindClass("cn/myflv/kernel/ReKernelXCallback");
     if (!cls) {
         LOGE("startListening: FindClass failed");
@@ -611,7 +673,6 @@ Java_cn_myflv_kernel_ReKernelX_startListening(
 
     g_callback = env->NewGlobalRef(callback);
 
-    /* Create and bind netlink socket */
     g_fd = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_GENERIC);
     if (g_fd < 0) {
         LOGE("startListening: socket() failed: %s", strerror(errno));
@@ -630,7 +691,6 @@ Java_cn_myflv_kernel_ReKernelX_startListening(
         return JNI_FALSE;
     }
 
-    /* Resolve genl family and join multicast group */
     if (resolveFamily() < 0) {
         LOGE("startListening: resolveFamily failed — kernel module not loaded?");
         cleanup_globals(env);
@@ -646,10 +706,21 @@ Java_cn_myflv_kernel_ReKernelX_startListening(
         }
     }
 
-    /* Start receive thread */
+    g_wakefd = eventfd(0, EFD_CLOEXEC);
+    if (g_wakefd < 0) {
+        LOGE("startListening: eventfd() failed: %s", strerror(errno));
+        cleanup_globals(env);
+        return JNI_FALSE;
+    }
+
     g_running.store(true);
-    if (pthread_create(&g_thread, nullptr, recv_thread, nullptr) != 0) {
-        LOGE("startListening: pthread_create failed: %s", strerror(errno));
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    int rc = pthread_create(&g_thread, &attr, recv_thread, nullptr);
+    pthread_attr_destroy(&attr);
+    if (rc != 0) {
+        LOGE("startListening: pthread_create failed: %s", strerror(rc));
         cleanup_globals(env);
         return JNI_FALSE;
     }
@@ -661,10 +732,19 @@ Java_cn_myflv_kernel_ReKernelX_startListening(
 extern "C" JNIEXPORT void JNICALL
 Java_cn_myflv_kernel_ReKernelX_stopListening(
         JNIEnv *env, jclass /* clazz */) {
-    if (!g_running.load())
+    std::unique_lock<std::mutex> startLock(g_start_mutex);
+    /* No-op when fully idle. */
+    if (!g_running.load() && g_thread == 0 && g_wakefd < 0 &&
+        g_fd < 0 && g_callback == nullptr)
         return;
     LOGI("stopListening: stopping...");
-    cleanup_globals(env);
+    /* Wake the recv thread; it tears itself down and clears g_thread. */
+    g_running.store(false);
+    if (g_wakefd >= 0) {
+        eventfd_t val = 1;
+        (void)eventfd_write(g_wakefd, val);
+    }
+    g_thread_cv.wait(startLock, [] { return g_thread == 0; });
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
