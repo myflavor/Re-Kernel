@@ -3,11 +3,11 @@ package cn.myflv.kernel;
 public interface ReKernelXCallback {
 
     /** binderType: a binder transaction call */
-    int BINDER_TRANSACTION      = 0;
+    int BINDER_TRANSACTION      = 1;
     /** binderType: a binder transaction reply */
-    int BINDER_REPLY            = 1;
+    int BINDER_REPLY            = 2;
     /** binderType: free-buffer exhaustion burst */
-    int BINDER_FREE_BUFFER_FULL = 2;
+    int BINDER_FREE_BUFFER_FULL = 3;
 
     /** proto: IPv4 */
     int PROTO_IPV4 = 4;

@@ -101,9 +101,9 @@ enum rekernel_x_event_type {
 
 /* binder sub-types (struct rekernel_x_binder_event.binder_type) */
 enum rekernel_x_binder_type {
-	REKERNEL_X_BINDER_TRANSACTION      = 0,
-	REKERNEL_X_BINDER_REPLY            = 1,
-	REKERNEL_X_BINDER_FREE_BUFFER_FULL = 2,
+	REKERNEL_X_BINDER_TRANSACTION      = 1,
+	REKERNEL_X_BINDER_REPLY            = 2,
+	REKERNEL_X_BINDER_FREE_BUFFER_FULL = 3,
 };
 
 /* network protocol (struct rekernel_x_network_event.proto) */

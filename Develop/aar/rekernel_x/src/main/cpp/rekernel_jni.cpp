@@ -68,9 +68,9 @@
 #define REKERNEL_X_EVT_NETWORK            3
 
 /* binder sub-types */
-#define REKERNEL_X_BINDER_TRANSACTION     0
-#define REKERNEL_X_BINDER_REPLY           1
-#define REKERNEL_X_BINDER_FREE_BUFFER_FULL 2
+#define REKERNEL_X_BINDER_TRANSACTION     1
+#define REKERNEL_X_BINDER_REPLY           2
+#define REKERNEL_X_BINDER_FREE_BUFFER_FULL 3
 
 /* network protocol */
 #define REKERNEL_X_NET_PROTO_IPV4         4
