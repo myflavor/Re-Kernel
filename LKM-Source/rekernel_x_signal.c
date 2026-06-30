@@ -6,6 +6,8 @@
  * Description: ReKernel-X signal trace hook — fatal signals sent to frozen tasks.
  * Author: nep_timeline@outlook.com, myflavor <admin@myflv.cn>
  */
+#include "rekernel_x_log.h"
+#include "rekernel_x.h"
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -13,7 +15,6 @@
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <trace/hooks/signal.h>
-#include "rekernel_x.h"
 
 static bool re_signal_hook;
 
@@ -27,9 +28,7 @@ void line_signal(void *data, int sig, struct task_struct *killer, struct task_st
 			|| sig == SIGTERM
 			|| sig == SIGABRT
 			|| sig == SIGQUIT)) {
-#ifdef DEBUG
-		pr_info("[ReKernel-X LKM] Process Signal! signal=%d\n", sig);
-#endif
+		rekernel_x_debug_log("Process Signal! signal=%d\n", sig);
 		if (rekernel_x_netlink_ready()) {
 			struct rekernel_x_event event = {
 				.type = REKERNEL_X_EVT_SIGNAL,
@@ -52,7 +51,7 @@ int register_signal(void)
 
 	rc = register_trace_android_vh_do_send_sig_info(line_signal, NULL);
 	if (rc != LINE_SUCCESS) {
-		pr_err("register_trace_android_vh_do_send_sig_info failed, rc=%d\n", rc);
+		rekernel_x_err_log("register_trace_android_vh_do_send_sig_info failed, rc=%d\n", rc);
 		return rc;
 	}
 	re_signal_hook = true;

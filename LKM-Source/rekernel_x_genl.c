@@ -7,6 +7,8 @@
  *              event serialisation (NLA) and multicast to userspace.
  * Author: nep_timeline@outlook.com, myflavor <admin@myflv.cn>
  */
+#include "rekernel_x_log.h"
+#include "rekernel_x.h"
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
@@ -16,7 +18,6 @@
 #include <linux/netlink.h>
 #include <net/sock.h>
 #include <net/genetlink.h>
-#include "rekernel_x.h"
 
 static bool rekernel_x_genl_registered = false;
 
@@ -34,9 +35,7 @@ static int rekernel_x_genl_monitor_net(struct sk_buff *skb, struct genl_info *in
 		return -EINVAL;
 
 	muid = (uid_t)nla_get_u32(info->attrs[REKERNEL_X_A_UID]);
-#ifdef DEBUG
-	pr_info("ReKernel-X addMonitorUid uid=%d\n", muid);
-#endif
+	rekernel_x_debug_log("addMonitorUid uid=%d\n", muid);
 	net_uid_add(muid);
 	return 0;
 }
@@ -50,9 +49,7 @@ static int rekernel_x_genl_del_monitor_net(struct sk_buff *skb, struct genl_info
 		return -EINVAL;
 
 	muid = (uid_t)nla_get_u32(info->attrs[REKERNEL_X_A_UID]);
-#ifdef DEBUG
-	pr_info("ReKernel-X delMonitorNet uid=%d\n", muid);
-#endif
+	rekernel_x_debug_log("delMonitorNet uid=%d\n", muid);
 	net_uid_del(muid);
 	return 0;
 }
@@ -109,13 +106,13 @@ int sendMessage(struct rekernel_x_event *event)
     /* Binder is the largest payload: ~168 bytes nested.  256 is safe. */
     skb = genlmsg_new(nla_total_size(256), GFP_ATOMIC);
     if (!skb) {
-        pr_err("genlmsg alloc failure!\n");
+        rekernel_x_err_log("genlmsg alloc failure!\n");
         return LINE_ERROR;
     }
 
     msg_head = genlmsg_put(skb, 0, 0, &rekernel_x_genl_family, 0, REKERNEL_X_C_EVENT);
     if (!msg_head) {
-        pr_err("genlmsg_put failure!\n");
+        rekernel_x_err_log("genlmsg_put failure!\n");
         nlmsg_free(skb);
         return LINE_ERROR;
     }
@@ -185,7 +182,7 @@ int sendMessage(struct rekernel_x_event *event)
     /* genlmsg_multicast consumes skb; -ESRCH only means "no listeners". */
     rc = genlmsg_multicast(&rekernel_x_genl_family, skb, 0, 0, GFP_ATOMIC);
     if (rc && rc != -ESRCH) {
-        pr_err("genlmsg_multicast failed, rc=%d\n", rc);
+        rekernel_x_err_log("genlmsg_multicast failed, rc=%d\n", rc);
         return LINE_ERROR;
     }
 
@@ -194,21 +191,21 @@ int sendMessage(struct rekernel_x_event *event)
 nla_fail:
     genlmsg_cancel(skb, msg_head);
     nlmsg_free(skb);
-    pr_err("sendMessage: nla_put failed\n");
+    rekernel_x_err_log("sendMessage: nla_put failed\n");
     return LINE_ERROR;
 }
 
 int register_genl(void)
 {
-	pr_info("Trying to register ReKernel-X Generic Netlink family......\n");
+	rekernel_x_info_log("Trying to register Generic Netlink family......\n");
 
 	if (genl_register_family(&rekernel_x_genl_family) != 0) {
-		pr_err("Failed to register ReKernel-X genl family!\n");
+		rekernel_x_err_log("Failed to register genl family!\n");
 		return LINE_ERROR;
 	}
 	rekernel_x_genl_registered = true;
 
-	pr_info("Registered ReKernel-X genl family! ID: %d\n", rekernel_x_genl_family.id);
+	rekernel_x_info_log("Registered genl family! ID: %d\n", rekernel_x_genl_family.id);
 	return LINE_SUCCESS;
 }
 

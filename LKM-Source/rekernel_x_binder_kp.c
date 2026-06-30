@@ -8,6 +8,8 @@
  *              drop outdated async transactions for frozen tasks.
  * Author: nep_timeline@outlook.com, myflavor <admin@myflv.cn>
  */
+#include "rekernel_x_log.h"
+#include "rekernel_x.h"
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -16,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/kprobes.h>
 #include <../android/binder_internal.h>
-#include "rekernel_x.h"
 
 static unsigned long (*re_kallsyms_lookup_name)(const char* name);
 static void (*re_binder_transaction_buffer_release)(struct binder_proc* proc, struct binder_thread* thread, struct binder_buffer* buffer, binder_size_t off_end_offset, bool is_failure);
@@ -126,9 +127,7 @@ static int __nocfi binder_proc_transaction_pre(struct kprobe* p, struct pt_regs*
 
 		if (t_outdated) {
 			struct binder_buffer* buffer = t_outdated->buffer;
-#ifdef DEBUG
-			pr_info("[ReKernel-X LKM] free_outdated txn %d supersedes %d\n", t->debug_id, t_outdated->debug_id);
-#endif
+			rekernel_x_debug_log("free_outdated txn %d supersedes %d\n", t->debug_id, t_outdated->debug_id);
 			t_outdated->buffer = NULL;
 			buffer->transaction = NULL;
 			binder_release_entire_buffer(proc, NULL, buffer, false);
@@ -155,7 +154,7 @@ void __nocfi register_binder_kp(void) {
 
 	rc = register_kprobe(&kp_kallsyms_lookup_name);
 	if (rc != LINE_SUCCESS) {
-		pr_err("register kallsyms_lookup_name kprobe failed, rc=%d (binder async-cleanup disabled)\n", rc);
+		rekernel_x_err_log("register kallsyms_lookup_name kprobe failed, rc=%d (binder async-cleanup disabled)\n", rc);
 		return;
 	}
 	re_kallsyms_lookup_name = (void*)kp_kallsyms_lookup_name.addr;
@@ -166,13 +165,13 @@ void __nocfi register_binder_kp(void) {
 	re_binder_stats = (void*)re_kallsyms_lookup_name("binder_stats");
 
 	if (re_binder_transaction_buffer_release == NULL || re_binder_alloc_free_buf == NULL || re_binder_stats == NULL) {
-		pr_err("resolve binder symbols failed (binder async-cleanup disabled)\n");
+		rekernel_x_err_log("resolve binder symbols failed (binder async-cleanup disabled)\n");
 		return;
 	}
 
 	rc = register_kprobe(&kp_binder_proc_transaction);
 	if (rc != LINE_SUCCESS) {
-		pr_err("register binder_proc_transaction kprobe failed, rc=%d (binder async-cleanup disabled)\n", rc);
+		rekernel_x_err_log("register binder_proc_transaction kprobe failed, rc=%d (binder async-cleanup disabled)\n", rc);
 		return;
 	}
 	re_kp_binder_proc_registered = true;

@@ -7,6 +7,8 @@
  *              userspace via genl and queried by the netfilter hook.
  * Author: nep_timeline@outlook.com, myflavor <admin@myflv.cn>
  */
+#include "rekernel_x_log.h"
+#include "rekernel_x.h"
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -16,7 +18,6 @@
 #include <linux/hashtable.h>
 #include <linux/slab.h>
 #include <linux/rcupdate.h>
-#include "rekernel_x.h"
 
 /* hashmap for net monitor uids */
 #define REKERNEL_X_NET_UID_HASH_BITS 6

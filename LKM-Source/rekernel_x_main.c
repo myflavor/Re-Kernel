@@ -7,60 +7,59 @@
  *              transport and the binder/signal/netfilter/kprobe hooks.
  * Author: nep_timeline@outlook.com, myflavor <admin@myflv.cn>
  */
+#include "rekernel_x_log.h"
+#include "rekernel_x.h"
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include "rekernel_x.h"
 
 static int __init start_rekernel(void)
 {
-	pr_info("Thank you for choosing ReKernel-X!\n");
-#ifdef DEBUG
-	pr_info("Debug mode is enabled!\n");
-#endif
-	pr_info("ReKernel-X %s | DEVELOPER: Sakion Team | GENL FAMILY: %s\n", REKERNEL_X_VERSION, REKERNEL_X_GENL_FAMILY_NAME);
+	rekernel_x_info_log("starting...\n");
+	rekernel_x_debug_log("Debug mode is enabled!\n");
+	rekernel_x_info_log("Version %s | Fork by myflavor | Upstream: Sakion Team\n", REKERNEL_X_VERSION);
 
 	if (register_genl() != LINE_SUCCESS) {
-		pr_err("%s: Failed to register genl family!\n", __func__);
+		rekernel_x_err_log("%s: Failed to register genl family!\n", __func__);
 		return LINE_ERROR;
 	}
 
-	pr_info("ReKernel-X start hooking!\n");
+	rekernel_x_info_log("start hooking!\n");
 
 	if (register_binder() != LINE_SUCCESS) {
-		pr_err("%s: Failed to hook binder!\n", __func__);
-		goto err_binder;
+		rekernel_x_err_log("%s: Failed to hook binder!\n", __func__);
+		goto err;
 	}
 
 	if (register_signal() != LINE_SUCCESS) {
-		pr_err("%s: Failed to hook signal!\n", __func__);
-		goto err_signal;
+		rekernel_x_err_log("%s: Failed to hook signal!\n", __func__);
+		goto err;
 	}
 
 	if (register_netfilter() != LINE_SUCCESS) {
-		pr_err("%s: Failed to hook netfilter!\n", __func__);
-		goto err_netfilter;
+		rekernel_x_err_log("%s: Failed to hook netfilter!\n", __func__);
+		goto err;
 	}
 
 #ifdef CLEAN_UP_ASYNC_BINDER
 	register_binder_kp();
 #endif
 
-	pr_info("ReKernel-X hooked!\n");
+	rekernel_x_info_log("hooked!\n");
 	return LINE_SUCCESS;
 
-err_netfilter:
+err:
+	unregister_binder_kp();
+	unregister_netfilter();
 	unregister_signal();
-err_signal:
 	unregister_binder();
-err_binder:
 	unregister_genl();
 	return LINE_ERROR;
 }
 
 static void __exit exit_rekernel(void)
 {
-	pr_info("ReKernel-X closing...\n");
+	rekernel_x_info_log("closing...\n");
 	unregister_binder_kp();
 	unregister_netfilter();
 	unregister_signal();

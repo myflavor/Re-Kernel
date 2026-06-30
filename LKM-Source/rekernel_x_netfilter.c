@@ -7,6 +7,8 @@
  *              monitored user-app uids (IPv4/IPv6).
  * Author: nep_timeline@outlook.com, myflavor <admin@myflv.cn>
  */
+#include "rekernel_x_log.h"
+#include "rekernel_x.h"
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
@@ -23,7 +25,6 @@
 #include <net/ipv6.h>
 #include <net/tcp.h>
 #include <linux/rcupdate.h>
-#include "rekernel_x.h"
 
 static inline uid_t line_sock2uid(struct sock *sk)
 {
@@ -140,9 +141,7 @@ static unsigned int rekernel_x_pkg_ipv4_ipv6_in(void *priv, struct sk_buff *skb,
 		return NF_ACCEPT;
 	}
 
-#ifdef DEBUG
-	pr_info("[ReKernel-X LKM] Receive net data! target=%d\n", uid);
-#endif
+	rekernel_x_debug_log("Receive net data! target=%d\n", uid);
 	if (rekernel_x_netlink_ready()) {
 		struct rekernel_x_event event = {
 			.type = REKERNEL_X_EVT_NETWORK,
@@ -210,7 +209,7 @@ int register_netfilter(void)
 	for_each_net(net) {
 		rc = nf_register_net_hooks(net, rekernel_x_nf_ops, ARRAY_SIZE(rekernel_x_nf_ops));
 		if (rc != LINE_SUCCESS) {
-			pr_err("register netfilter hooks failed, rc=%d\n", rc);
+			rekernel_x_err_log("register netfilter hooks failed, rc=%d\n", rc);
 			break;
 		}
 	}

@@ -7,6 +7,8 @@
  *              supported kernel range. Used by the binder/signal/kprobe hooks.
  * Author: nep_timeline@outlook.com, myflavor <admin@myflv.cn>
  */
+#include "rekernel_x_log.h"
+#include "rekernel_x.h"
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -14,7 +16,6 @@
 #include <linux/cgroup.h>
 #include <linux/version.h>
 #include <linux/sched.h>
-#include "rekernel_x.h"
 
 static inline bool rekernel_x_is_frozen_state_compatible(struct task_struct *task)
 {

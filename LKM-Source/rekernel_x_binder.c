@@ -7,6 +7,8 @@
  *              replies, and async-buffer-full detection for frozen tasks.
  * Author: nep_timeline@outlook.com, myflavor <admin@myflv.cn>
  */
+#include "rekernel_x_log.h"
+#include "rekernel_x.h"
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -17,7 +19,6 @@
 #include <linux/string.h>
 #include <trace/hooks/binder.h>
 #include <../android/binder_internal.h>
-#include "rekernel_x.h"
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
 void line_binder_alloc_new_buf_locked(void *data, size_t size, size_t *free_async_space, int is_async, bool *should_fail)
@@ -43,9 +44,7 @@ void line_binder_alloc_new_buf_locked(void *data, size_t size, struct binder_all
 		p = find_task_by_vpid(alloc->pid);
 		rcu_read_unlock();
 		if (p != NULL && line_is_frozen(p)) {
-#ifdef DEBUG
-			pr_info("[ReKernel-X LKM] Binder Free buffer full! from=%d | target=%d\n", task_uid(current).val, task_uid(p).val);
-#endif
+			rekernel_x_debug_log("Binder Free buffer full! from=%d | target=%d\n", task_uid(current).val, task_uid(p).val);
 			if (rekernel_x_netlink_ready()) {
 				struct rekernel_x_event event = {
 					.type = REKERNEL_X_EVT_BINDER,
@@ -98,9 +97,7 @@ void line_binder_reply(void *data, struct binder_proc *target_proc, struct binde
 		&& (task_uid(target_proc->tsk).val <= MAX_SYSTEM_UID)
 		&& (proc->pid != target_proc->pid)
 		&& line_is_frozen(target_proc->tsk)) {
-#ifdef DEBUG
-		pr_info("[ReKernel-X LKM] Sync Binder Reply! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
-#endif
+		rekernel_x_debug_log("Sync Binder Reply! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
 		if (rekernel_x_netlink_ready()) {
 			struct rekernel_x_event event = {
 				.type = REKERNEL_X_EVT_BINDER,
@@ -153,9 +150,7 @@ void line_binder_transaction(void *data, struct binder_proc *target_proc, struct
 		&& (task_uid(target_proc->tsk).val > MIN_USERAPP_UID)
 		&& (proc->pid != target_proc->pid)
 		&& line_is_frozen(target_proc->tsk)) {
-#ifdef DEBUG
-		pr_info("[ReKernel-X LKM] Sync Binder Transaction! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
-#endif
+		rekernel_x_debug_log("Sync Binder Transaction! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
 		if (rekernel_x_netlink_ready()) {
 			struct rekernel_x_event event = {
 				.type = REKERNEL_X_EVT_BINDER,
@@ -197,9 +192,7 @@ void line_binder_transaction(void *data, struct binder_proc *target_proc, struct
 				}
 				if (i == INTERFACETOKEN_BUFF_SIZE) rpc_name[i-1] = '\0';
 			}
-#ifdef DEBUG
-			pr_info("[ReKernel-X LKM] ASync Binder Transaction! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
-#endif
+			rekernel_x_debug_log("ASync Binder Transaction! from=%d | target=%d\n", task_uid(proc->tsk).val, task_uid(target_proc->tsk).val);
 			if (rekernel_x_netlink_ready()) {
 				struct rekernel_x_event event = {
 					.type = REKERNEL_X_EVT_BINDER,
@@ -226,28 +219,28 @@ int register_binder(void)
 
 	rc = register_trace_android_vh_binder_alloc_new_buf_locked(line_binder_alloc_new_buf_locked, NULL);
 	if (rc != LINE_SUCCESS) {
-		pr_err("register_trace_android_vh_binder_alloc_new_buf_locked failed, rc=%d\n", rc);
+		rekernel_x_err_log("register_trace_android_vh_binder_alloc_new_buf_locked failed, rc=%d\n", rc);
 		goto err;
 	}
 	re_binder_hook_alloc_buf = true;
 
 	rc = register_trace_android_vh_binder_preset(line_binder_preset, NULL);
 	if (rc != LINE_SUCCESS) {
-		pr_err("register_trace_android_vh_binder_preset failed, rc=%d\n", rc);
+		rekernel_x_err_log("register_trace_android_vh_binder_preset failed, rc=%d\n", rc);
 		goto err;
 	}
 	re_binder_hook_preset = true;
 
 	rc = register_trace_android_vh_binder_reply(line_binder_reply, NULL);
 	if (rc != LINE_SUCCESS) {
-		pr_err("register_trace_android_vh_binder_reply failed, rc=%d\n", rc);
+		rekernel_x_err_log("register_trace_android_vh_binder_reply failed, rc=%d\n", rc);
 		goto err;
 	}
 	re_binder_hook_reply = true;
 
 	rc = register_trace_android_vh_binder_trans(line_binder_transaction, NULL);
 	if (rc != LINE_SUCCESS) {
-		pr_err("register_trace_android_vh_binder_trans failed, rc=%d\n", rc);
+		rekernel_x_err_log("register_trace_android_vh_binder_trans failed, rc=%d\n", rc);
 		goto err;
 	}
 	re_binder_hook_trans = true;
