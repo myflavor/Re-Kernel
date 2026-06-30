@@ -53,14 +53,14 @@ new Thread(() -> {
     if (ReKernelX.connect()) {
 
 
-        Log.i("ReKernelX", "connected");
+        Log.i("ReKernel-X", "connected");
 
         ReKernelX.setCallback(new ReKernelXCallback() {
             @Override
             public void binder(int binderType, int oneway, int fromUid, int fromPid, int targetUid, int targetPid, String rpcName, int code) {
-                Log.i("ReKernelX", String.format("transaction = %s", binderType == BINDER_TRANSACTION));
-                Log.i("ReKernelX", String.format("replay = %s", binderType == BINDER_REPLY));
-                Log.i("ReKernelX", String.format("freeBufferFull = %s", binderType == BINDER_FREE_BUFFER_FULL));
+                Log.i("ReKernel-X", String.format("transaction = %s", binderType == BINDER_TRANSACTION));
+                Log.i("ReKernel-X", String.format("replay = %s", binderType == BINDER_REPLY));
+                Log.i("ReKernel-X", String.format("freeBufferFull = %s", binderType == BINDER_FREE_BUFFER_FULL));
             }
 
             @Override
@@ -70,14 +70,14 @@ new Thread(() -> {
 
             @Override
             public void network(int proto, int targetUid, int dataLen) {
-                Log.i("ReKernelX", String.format("ipv4 = %s", proto == PROTO_IPV4));
-                Log.i("ReKernelX", String.format("ipv6 = %s", proto == PROTO_IPV6));
+                Log.i("ReKernel-X", String.format("ipv4 = %s", proto == PROTO_IPV4));
+                Log.i("ReKernel-X", String.format("ipv6 = %s", proto == PROTO_IPV6));
             }
         });
 
         ReKernelX.pollEvent();
 
-        Log.i("ReKernelX", "disconnected");
+        Log.i("ReKernel-X", "disconnected");
 
     }
 
