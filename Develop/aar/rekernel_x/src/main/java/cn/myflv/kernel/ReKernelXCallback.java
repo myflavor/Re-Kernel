@@ -15,13 +15,6 @@ public interface ReKernelXCallback {
     int PROTO_IPV6 = 6;
 
     /**
-     * Called only when the netlink connection drops unexpectedly
-     * (recv error while still running). Not invoked on a clean
-     * {@link ReKernelX#stopListening()}.
-     */
-    void disconnected();
-
-    /**
      * @param binderType {@link #BINDER_TRANSACTION}, {@link #BINDER_REPLY},
      *                   or {@link #BINDER_FREE_BUFFER_FULL}
      * @param oneway     1 if async, 0 if sync
