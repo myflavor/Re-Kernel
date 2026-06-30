@@ -113,7 +113,7 @@ static jmethodID         g_mid_network      = nullptr;
 
 static int               g_fd               = -1;
 static int               g_wakefd           = -1; /* eventfd: wakes recv thread out of poll() */
-static uint16_t          g_family_id        = 0;
+static std::atomic<uint16_t> g_family_id{0};
 static uint32_t          g_mcast_group_id   = 0;
 static std::atomic<uint32_t> g_seq{1};
 static std::atomic<bool> g_running{false};
@@ -227,6 +227,10 @@ static int resolveFamily() {
         LOGE("resolveFamily: recv failed: %s", strerror(errno));
         return -1;
     }
+    if (rlen < static_cast<int>(NLMSG_HDRLEN)) {
+        LOGE("resolveFamily: reply too short (%d bytes)", rlen);
+        return -1;
+    }
 
     auto *rnlh = reinterpret_cast<struct nlmsghdr *>(reply);
     if (rnlh->nlmsg_type == NLMSG_ERROR) {
@@ -239,7 +243,11 @@ static int resolveFamily() {
     bool have_fid = false;
 
     int pos = NLMSG_HDRLEN + GENL_HDRLEN;
+    /* Trust the smaller of declared length and actually-received bytes, so a
+     * malformed nlmsg_len can't make us walk past the buffer. */
     int end = static_cast<int>(rnlh->nlmsg_len);
+    if (end > rlen)
+        end = rlen;
 
     NLA_FOR_EACH_ATTR(pos, end, attr, reply) {
         int type = attr->nla_type & NLA_TYPE_MASK;
@@ -262,9 +270,9 @@ static int resolveFamily() {
         return -1;
     }
 
-    g_family_id = fid;
+    g_family_id.store(fid);
     g_mcast_group_id = gid;
-    LOGI("resolveFamily: family_id=%u mcast_group_id=%u", g_family_id, g_mcast_group_id);
+    LOGI("resolveFamily: family_id=%u mcast_group_id=%u", g_family_id.load(), g_mcast_group_id);
     return 0;
 }
 
@@ -279,7 +287,7 @@ static int sendCommand(uint8_t cmd, uint32_t uid) {
 
     auto *nlh = reinterpret_cast<struct nlmsghdr *>(buf);
     nlh->nlmsg_len   = total;
-    nlh->nlmsg_type  = g_family_id;
+    nlh->nlmsg_type  = g_family_id.load();
     nlh->nlmsg_flags = NLM_F_REQUEST;
     nlh->nlmsg_seq   = g_seq.fetch_add(1);
     nlh->nlmsg_pid   = 0;
@@ -484,7 +492,7 @@ static void *recv_thread(void *) {
 
             if (nlh->nlmsg_type == NLMSG_ERROR || nlh->nlmsg_type == NLMSG_DONE)
                 continue;
-            if (nlh->nlmsg_type != g_family_id)
+            if (nlh->nlmsg_type != g_family_id.load())
                 continue;
             if (nlh->nlmsg_len < NLMSG_HDRLEN + GENL_HDRLEN)
                 continue;
@@ -529,53 +537,65 @@ static void *recv_thread(void *) {
      * a wakefd-induced stop exit is clean (no callback). */
     const bool fire_callback = had_error && g_running.load();
 
-    {
-        std::lock_guard<std::mutex> lock(g_send_mutex);
-        if (g_fd >= 0) {
-            close(g_fd);
-            g_fd = -1;
-        }
-    }
-    if (g_wakefd >= 0) {
-        close(g_wakefd);
-        g_wakefd = -1;
-    }
-    g_running.store(false);
+    /* Pin the callback + methodID via local copies so we can release the
+     * global refs under the lock and still fire the callback afterwards
+     * without ever touching freed globals — and so the object whose method
+     * is on the stack is never deleted mid-call. */
+    jobject   cb       = nullptr;
+    jmethodID mid_disc = nullptr;
 
-    /* Clear our slot before the callback so a reconnecting startListening()
-     * sees clean state and never calls cleanup_globals() from this thread. */
+    /* Tear down everything under g_start_mutex so a concurrent
+     * startListening()/stopListening() never races us on g_fd / g_wakefd /
+     * the global refs. g_thread is cleared and broadcast *before* the
+     * callback so a reconnect from inside disconnected() sees fully idle
+     * state — this thread no longer touches any global after this block. */
     {
         std::lock_guard<std::mutex> lk(g_start_mutex);
+
+        {
+            std::lock_guard<std::mutex> lock(g_send_mutex);
+            if (g_fd >= 0) {
+                close(g_fd);
+                g_fd = -1;
+            }
+        }
+        if (g_wakefd >= 0) {
+            close(g_wakefd);
+            g_wakefd = -1;
+        }
+        g_running.store(false);
+
+        if (fire_callback && g_callback && g_mid_disconnected) {
+            cb       = env->NewLocalRef(g_callback);
+            mid_disc = g_mid_disconnected;
+        }
+        if (g_callback) {
+            env->DeleteGlobalRef(g_callback);
+            g_callback = nullptr;
+        }
+        if (g_cbClass) {
+            env->DeleteGlobalRef(g_cbClass);
+            g_cbClass = nullptr;
+        }
+        g_mid_disconnected = nullptr;
+        g_mid_binder       = nullptr;
+        g_mid_signal       = nullptr;
+        g_mid_network      = nullptr;
+        g_family_id.store(0);
+        g_mcast_group_id   = 0;
+        g_seq.store(1);
+
         g_thread = 0;
     }
     g_thread_cv.notify_all();
 
-    /* Pin the callback via a local ref and delete the global ref first, so
-     * the object whose method is on the stack is never deleted mid-call. */
-
-    if (fire_callback && g_callback && g_mid_disconnected) {
-        jobject cb = env->NewLocalRef(g_callback);
-        env->DeleteGlobalRef(g_callback);
-        g_callback = nullptr;
-        if (cb)
-            env->CallVoidMethod(cb, g_mid_disconnected);
-        if (cb)
-            env->DeleteLocalRef(cb);
-    } else if (g_callback) {
-        env->DeleteGlobalRef(g_callback);
-        g_callback = nullptr;
+    /* Fire the disconnect callback now that globals are clean and our slot
+     * is cleared. A reconnecting startListening() from inside the callback
+     * builds fresh state that this thread will not touch. */
+    if (cb) {
+        env->CallVoidMethod(cb, mid_disc);
+        env->DeleteLocalRef(cb);
     }
-    if (g_cbClass) {
-        env->DeleteGlobalRef(g_cbClass);
-        g_cbClass = nullptr;
-    }
-    g_mid_disconnected = nullptr;
-    g_mid_binder       = nullptr;
-    g_mid_signal       = nullptr;
-    g_mid_network      = nullptr;
-    g_family_id        = 0;
-    g_mcast_group_id   = 0;
-    g_seq.store(1);
 
     if (env->ExceptionCheck()) {
         env->ExceptionDescribe();
@@ -594,7 +614,10 @@ static void *recv_thread(void *) {
  * ========================================================================== */
 
 /* Roll back partial state when startListening() fails partway through.
- * Only called on the Java thread with no live recv_thread. */
+ * Only called on the Java thread with no live recv_thread.
+ * PRECONDITION: caller holds g_start_mutex (every call site is inside
+ * startListening, which acquires it for its whole body). Do NOT re-lock
+ * g_start_mutex here — std::mutex is non-recursive and would self-deadlock. */
 static void cleanup_globals(JNIEnv *env) {
     g_running.store(false);
 
@@ -622,13 +645,12 @@ static void cleanup_globals(JNIEnv *env) {
     g_mid_binder       = nullptr;
     g_mid_signal       = nullptr;
     g_mid_network      = nullptr;
-    g_family_id        = 0;
+    g_family_id.store(0);
     g_mcast_group_id   = 0;
     g_seq.store(1);
-    {
-        std::lock_guard<std::mutex> lk(g_start_mutex);
-        g_thread = 0;
-    }
+    /* g_start_mutex is held by the caller (startListening); just clear our
+     * slot and wake any stopListening() that might be waiting on it. */
+    g_thread = 0;
     g_thread_cv.notify_all();
 }
 
@@ -725,7 +747,7 @@ Java_cn_myflv_kernel_ReKernelX_startListening(
         return JNI_FALSE;
     }
 
-    LOGI("startListening: started (family_id=%u)", g_family_id);
+    LOGI("startListening: started (family_id=%u)", g_family_id.load());
     return JNI_TRUE;
 }
 
@@ -750,7 +772,7 @@ Java_cn_myflv_kernel_ReKernelX_stopListening(
 extern "C" JNIEXPORT jboolean JNICALL
 Java_cn_myflv_kernel_ReKernelX_addMonitorNet(
         JNIEnv *env, jclass /* clazz */, jint uid) {
-    if (!g_running.load() || g_family_id == 0)
+    if (!g_running.load() || g_family_id.load() == 0)
         return JNI_FALSE;
     return sendCommand(REKERNEL_X_C_ADD_MONITOR_NET, static_cast<uint32_t>(uid)) == 0
            ? JNI_TRUE : JNI_FALSE;
@@ -759,7 +781,7 @@ Java_cn_myflv_kernel_ReKernelX_addMonitorNet(
 extern "C" JNIEXPORT jboolean JNICALL
 Java_cn_myflv_kernel_ReKernelX_delMonitorNet(
         JNIEnv *env, jclass /* clazz */, jint uid) {
-    if (!g_running.load() || g_family_id == 0)
+    if (!g_running.load() || g_family_id.load() == 0)
         return JNI_FALSE;
     return sendCommand(REKERNEL_X_C_DEL_MONITOR_NET, static_cast<uint32_t>(uid)) == 0
            ? JNI_TRUE : JNI_FALSE;
